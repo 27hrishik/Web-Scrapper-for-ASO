@@ -1,6 +1,6 @@
 # Python-Web-Scrapper-for-ASO
 ## Requires ## 
-- Chrome web Drivers 
+- Chrome Web Driver 
 - Selenium Python API 
 
 Download link : https://chromedriver.chromium.org/downloads
