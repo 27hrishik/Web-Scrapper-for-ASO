@@ -39,9 +39,9 @@ class KeywordCollector:
     def __init__(self, platform:Platform):
         self.platform = platform
 
-    def open_browser(self):
+    def open_browser(self,web_driver_path:str):
         # Creating an instance webdriver
-        self.browser = webdriver.Chrome(executable_path='/Users/appking/Desktop/chromedriver')
+        self.browser = webdriver.Chrome(executable_path=web_driver_path)
         # Opening Sensor Tower
         self.browser.get('https://www.sensortower.com')
 
@@ -79,9 +79,9 @@ class KeywordCollector:
 
 class KeywordResearch:
     
-    def open_browser(self):
+    def open_browser(self,web_driver_path:str):
         # Creating an instance webdriver
-        self.browser = webdriver.Chrome(executable_path='/Users/appking/Desktop/chromedriver')
+        self.browser = webdriver.Chrome(executable_path=web_driver_path)
 
         # Opening Sensor Tower
         self.browser.get('https://sensortower.com/users/sign_in')
@@ -172,9 +172,9 @@ class AppResearch:
     def __init__(self, platform:Platform):
         self.platform = platform
 
-    def open_browser(self):
+    def open_browser(self,web_driver_path:str):
         # Creating an instance webdriver
-        self.browser = webdriver.Chrome(executable_path='/Users/appking/Desktop/chromedriver')
+        self.browser = webdriver.Chrome(executable_path=web_driver_path)
 
         # Opening Sensor Tower
         self.browser.get('https://sensortower.com/users/sign_in')
