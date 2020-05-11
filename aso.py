@@ -2,6 +2,7 @@
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoSuchElementException
 from selenium.common.exceptions import TimeoutException
@@ -15,19 +16,38 @@ import ast
 def get_keywords_list(app_keyword_list: list):
     keywords = []
     for row in app_keyword_list :
-        temp_keywords = ast.literal_eval(row)
-        temp_keywords = [item.strip() for item in temp_keywords]
-        keywords += temp_keywords
+        keywords += get_keywords_from_string(str(row))
     return keywords
 
+def get_keywords_from_string(app_keyword:str):
+    temp_keywords = ast.literal_eval(app_keyword)
+    return [item.strip() for item in temp_keywords]
+
+def frequency_count_dictionary(keyword_list:list):
+    freq = {} 
+    for item in keyword_list: 
+        if (item in freq): 
+            freq[item] += 1
+        else: 
+            freq[item] = 1
+    return freq
+
+def get_comma_seperated_string(keyword_list:list):
+    key_string = str(keyword_list)
+    table =key_string.maketrans("","","[]'")
+    key_string = key_string.translate(table)
+    return key_string
+
 class elements_value_has_changed(object):
-    def __init__(self,*args):
+    def __init__(self,browser,args:list):
         self.arguments = args
+        self.prev_val = [ browser.find_element_by_xpath(item).text for item in args]
 
     def __call__(self, browser):
-        elements = [(browser.find_element_by_xpath(item),value) for item, value in self.arguments]
-        for element in elements:
-            if element[0].text != element[1]:
+        cur_val = [browser.find_element_by_xpath(item).text for item in self.arguments]
+        for old,new in zip(self.prev_val,cur_val):
+            if old != new:
+                self.prev_val = cur_val
                 return True
         return False
 
@@ -39,9 +59,14 @@ class KeywordCollector:
     def __init__(self, platform:Platform):
         self.platform = platform
 
-    def open_browser(self,web_driver_path:str):
+    def open_browser(self,web_driver_path:str,headless=False):
         # Creating an instance webdriver
-        self.browser = webdriver.Chrome(executable_path=web_driver_path)
+        if headless :
+            options = Options()
+            options.headless = True
+            self.browser = webdriver.Chrome(executable_path=web_driver_path,chrome_options=options)
+        else :
+            self.browser = webdriver.Chrome(executable_path=web_driver_path)    
         # Opening Sensor Tower
         self.browser.get('https://www.sensortower.com')
 
@@ -74,14 +99,20 @@ class KeywordCollector:
                 item['VISIBILITY'] = grades[1].text
                 item['INTERNATIONALIZATION'] = grades[2].text
                 item['KEYWORDS'] = [keyword.text for keyword in self.browser.find_elements_by_class_name('keyword')]
+                print(item)
                 app_details_df = app_details_df.append(item, ignore_index=True)
         return app_details_df
 
 class KeywordResearch:
     
-    def open_browser(self,web_driver_path:str):
+    def open_browser(self,web_driver_path:str,headless=False):
         # Creating an instance webdriver
-        self.browser = webdriver.Chrome(executable_path=web_driver_path)
+        if headless :
+            options = Options()
+            options.headless = True
+            self.browser = webdriver.Chrome(executable_path=web_driver_path,chrome_options=options)
+        else :
+            self.browser = webdriver.Chrome(executable_path=web_driver_path)
 
         # Opening Sensor Tower
         self.browser.get('https://sensortower.com/users/sign_in')
@@ -98,132 +129,70 @@ class KeywordResearch:
         submit = self.browser.find_element_by_name('commit')
         submit.click()
     
-    def goto_keyword_research(self):
-        self.browser.get('https://sensortower.com/aso/keyword-research')
+    def goto_keyword_ranking(self):
+        self.browser.get('https://sensortower.com/aso/keyword-rankings')
 
         # wait for close button in free tier
         WebDriverWait(self.browser,10).until(EC.presence_of_element_located((By.XPATH,'//*[@id="country-limitation-upgrade-modal"]/a')))
         close = self.browser.find_element_by_xpath('//*[@id="country-limitation-upgrade-modal"]/a')
         close.click()
 
-    def intialize_keyword_research(self):
-        # entering keyword
-        self.keyword_input = self.browser.find_element_by_xpath('//*[@id="research-keywords-input"]')
+    def clear_keyword_ranking(self):
+        # edit keyword
+        self.edit_keyword = self.browser.find_element_by_xpath('/html/body/div[3]/section/div[2]/div/div/button[1]')
+        self.edit_keyword.click()
 
-        # research button
-        self.research_button = self.browser.find_element_by_xpath('/html/body/div[3]/section/div[1]/div/div[2]/div/button[2]')
+        #select all
+        self.select_all = self.browser.find_element_by_xpath('/html/body/div[3]/section/div[2]/div/div/div[2]/button[1]')
+        self.select_all.click()
 
-        # xpath value for traffic and difficulty
-        self.xpath_traffic = '/html/body/div[3]/section/div[2]/table/tbody/tr[1]/td[1]/span'
-        self.xpath_difficulty = '/html/body/div[3]/section/div[2]/table/tbody/tr[1]/td[2]/span'
+        #delete keywords
+        self.delete_selected = self.browser.find_element_by_xpath('/html/body/div[3]/section/div[2]/div/div/div[2]/button[3]')
+        self.delete_selected.click()
 
-        # try dummy value
-        self.keyword_input.send_keys('space')
-        self.research_button.click()
-
-        # traffic and difficulty
-        WebDriverWait(self.browser,10).until(EC.presence_of_element_located((By.XPATH,self.xpath_traffic)))
-        self.traffic = self.browser.find_element_by_xpath(self.xpath_traffic)
-        self.difficulty = self.browser.find_element_by_xpath(self.xpath_difficulty)
+        WebDriverWait(self.browser,10).until(EC.presence_of_element_located((By.XPATH,'/html/body/div[13]/div[2]')))
+        #confirm delete
+        self.confirm_delete = self.browser.find_element_by_xpath('/html/body/div[13]/div[2]/div/div[3]/div/button')
+        self.confirm_delete.click()
 
     def read_traffic_and_difficulty(self,keyword_list:list):
-        #intialize data frame
-        keywords_data_df = pd.DataFrame(columns=['KEYWORD', 'TRAFFIC', 'DIFFICULTY'])
-        failed_keywords_df = pd.DataFrame(columns=['KEYWORD'])
-        for keyword in keyword_list:
-            # entering keyword and wait for updation
-            self.keyword_input.clear()
-            self.keyword_input.send_keys(keyword)
-            self.research_button.click()
-            try:
-                WebDriverWait(self.browser, 10).until(
-                    elements_value_has_changed((self.xpath_traffic, self.traffic.text), (self.xpath_difficulty, self.difficulty.text)))
-                print((keyword, self.traffic.text, self.difficulty.text))
-                item = {'KEYWORD': keyword, 'TRAFFIC': float(self.traffic.text), 'DIFFICULTY': float(self.difficulty.text)}
-                keywords_data_df = keywords_data_df.append(item,ignore_index=True)
-            except TimeoutException:
-                failed_keywords_df = failed_keywords_df.append({'KEYWORD':keyword},ignore_index=True)
-                continue
-        return keywords_data_df,failed_keywords_df
+        keyword_details_df = pd.DataFrame(columns=['KEYWORD','TRAFFIC','DIFFICULTY'])
 
-    def read_app_names(self,keyword_list:list):
-         #intialize data frame
-        keywords_data_df = pd.DataFrame(columns=['KEYWORD', 'APP_NAMES'])
-        failed_keywords_df = pd.DataFrame(columns=['KEYWORD'])
-        for keyword in keyword_list:
-            # entering keyword and wait for updation
-            self.keyword_input.clear()
-            self.keyword_input.send_keys(keyword)
-            self.research_button.click()
-            try:
-                WebDriverWait(self.browser, 10).until(
-                    elements_value_has_changed((self.xpath_traffic, self.traffic.text), (self.xpath_difficulty, self.difficulty.text)))
-                app_names = self.browser.find_elements_by_class_name('app-name');
-                app_names = [item.text for item in app_names]
-                print((keyword, app_names))
-                item = {'KEYWORD': keyword, 'APP_NAMES':app_names}
-                keywords_data_df = keywords_data_df.append(item,ignore_index=True)
-            except TimeoutException:
-                failed_keywords_df = failed_keywords_df.append({'KEYWORD':keyword},ignore_index=True)
-                continue
-        return keywords_data_df,failed_keywords_df
+        if not EC.presence_of_element_located((By.CLASS_NAME,'add-keyword-input')):
+            self.clear_keyword_ranking()
+        #input box
+        # self.input_box = self.browser.find_element_by_xpath('/html/body/div[3]/section/div[2]/div/div[2]/div[1]/div/input')
+        for i in range(0,len(keyword_list),8):
+            WebDriverWait(self.browser,5).until(EC.presence_of_element_located((By.CLASS_NAME,'add-keyword-input')))
+            self.input_box = self.browser.find_element_by_class_name('add-keyword-input')
 
-class AppResearch:
-    def __init__(self, platform:Platform):
-        self.platform = platform
+            #convert list into 8 batch string 
+            input_string = get_comma_seperated_string(keyword_list[i:min(i+8,len(keyword_list))])
+            
+            #input string
+            self.input_box.clear()
+            self.input_box.send_keys(input_string)
+            self.track_button = self.browser.find_element_by_xpath('/html/body/div[3]/section/div[2]/div/div[2]/div[3]/div/button')
+            self.track_button.click()
 
-    def open_browser(self,web_driver_path:str):
-        # Creating an instance webdriver
-        self.browser = webdriver.Chrome(executable_path=web_driver_path)
+            # wait for data
+            WebDriverWait(self.browser,10).until(EC.presence_of_element_located((By.XPATH,'/html/body/div[3]/section/div[2]/div/table')))
 
-        # Opening Sensor Tower
-        self.browser.get('https://sensortower.com/users/sign_in')
-
-    def login(self,username:str,password:str):
-        # Wait for browser to load login page
-        WebDriverWait(self.browser,10).until(EC.presence_of_element_located((By.NAME,'user[email]')))
-        email = self.browser.find_element_by_name('user[email]')
-        email.clear()
-        email.send_keys(username)
-        pwd = self.browser.find_element_by_name('user[password]')
-        pwd.clear()
-        pwd.send_keys(password)
-        submit = self.browser.find_element_by_name('commit')
-        submit.click()
-    
-    def get_app_categories(self, app_name_list:list):
-        #create a Empty Data Frame
-        app_categories_df = pd.DataFrame(columns=['APP_NAME', 'CATEGORIES'])
-
-        xpath_app_name = '//*[@id="overview"]/div[1]/div/div[1]/div/section[2]/div[1]/div[2]/h1/span'
-
-        for app_name in app_name_list:
-            search = self.browser.find_element_by_xpath('//*[@id="primary-app-search-field"]')
-            search.clear()
-            search.send_keys(app_name)
-            WebDriverWait(self.browser, 10).until(EC.presence_of_element_located((By.CLASS_NAME, 'autocomplete-dropdown')))
-            auto_complete_candidate = self.browser.find_elements_by_class_name('autocomplete-list-item')
-            # auto_complete_list = [item for item in auto_complete_candidate if
-            #                      EC.presence_of_element_located((By.CLASS_NAME,platform_class_name))]
-            auto_complete_list = []
-            for auto_complete in auto_complete_candidate:
-                try:
-                    flag = auto_complete.find_element_by_class_name(self.platform.value)
-                    auto_complete_list.append(auto_complete)
-                except NoSuchElementException:
-                    continue
-            if len(auto_complete_list) > 0:
-                auto_complete_list[0].click()
-                try:
-                    WebDriverWait(self.browser, 10).until(elements_value_has_changed((xpath_app_name,self.browser.find_element_by_xpath(xpath_app_name))))
-                except TimeoutError:
-                    continue
-                item = dict()
-                item['APP_NAME'] = self.browser.find_element_by_xpath(xpath_app_name).text 
-                categories = self.browser.find_element_by_xpath('//*[@id="about-app"]/table/tbody/tr[2]/td[2]')
-                category_tags = categories.find_elements_by_tag_name('a')
-                item['CATEGORIES'] = [item.text for item in category_tags]
+            # get keyword data for each row
+            keywords_data = self.browser.find_elements_by_class_name('keyword-overview-table-body-row')
+            
+            for i in range(1,len(keywords_data)+1) :
+                # /html/body/div[3]/section/div[2]/div/table/tbody/tr[1]/td[1]/span[2]
+                # /html/body/div[3]/section/div[2]/div/table/tbody/tr[1]/td[2]
+                # /html/body/div[3]/section/div[2]/div/table/tbody/tr[1]/td[3]
+                path = "/html/body/div[3]/section/div[2]/div/table/tbody/tr[{}]".format(i)
+                keyword = self.browser.find_element_by_xpath(path + '/td[1]/span[2]').text
+                traffic =  self.browser.find_element_by_xpath(path + '/td[2]').text
+                difficulty = self.browser.find_element_by_xpath(path + '/td[3]').text
+                item = {'KEYWORD':keyword,'TRAFFIC':traffic,'DIFFICULTY':difficulty}
                 print(item)
-                app_categories_df = app_categories_df.append(item, ignore_index=True)
-        return app_categories_df
+                keyword_details_df = keyword_details_df.append(item,ignore_index=True)
+            self.clear_keyword_ranking()
+        return keyword_details_df
+
 

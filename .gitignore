@@ -1,2 +1,3 @@
 # file to ignore
 main.ipynb
+node_modules
